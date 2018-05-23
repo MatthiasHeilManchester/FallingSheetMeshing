@@ -45,7 +45,7 @@
 
 
 // Do Navier Stokes (Fluid) or Poisson?
-//#define DO_FLUID
+#define DO_FLUID
 
 using namespace std;
 
