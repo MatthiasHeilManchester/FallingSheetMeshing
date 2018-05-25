@@ -32,18 +32,14 @@ template<class ELEMENT>
      // Initialise the data associated with adaptation
       initialise_adaptation_data();
 
+      // hierher always do in constructor of base class!
+
       // Setup boundary coordinates for boundaries
-      /* char filename[100]; */
-      /* ofstream some_file; */
       unsigned nb=nboundary();
       for (unsigned b=0;b<nb;b++)
        {
-        /* sprintf(filename,"RESLT/boundary_coord_test_from_orig%i.dat",b); */
-        /* some_file.open(filename); */
-        this->setup_boundary_coordinates(b); //,some_file);
-        /* some_file.close(); */
+        this->setup_boundary_coordinates(b);
        }       
-      //pause("done boundary coords test from orig");
     }
     
    /// \short Build mesh from specified triangulation and
@@ -66,10 +62,12 @@ template<class ELEMENT>
 
      // Add the volume constraints to the tetgenio data object
      // which may be bad because it's actually modifying things in the base
-     //mesh
+     // mesh: hierher why?
+
      //Create a local copy
      tetgenio *tetgen_input_pt = new tetgenio;;
      this->deep_copy_of_tetgenio(tetgen_io_pt,tetgen_input_pt);
+
      //Add volume constraints
      tetgen_input_pt->tetrahedronvolumelist = 
       new double[tetgen_input_pt->numberoftetrahedra];
@@ -102,26 +100,24 @@ template<class ELEMENT>
      delete tetgen_input_pt;
 
      // Setup boundary coordinates for boundaries
-     /* char filename[100]; */
-     /* ofstream some_file; */
      unsigned nb=nboundary();
      for (unsigned b=0;b<nb;b++)
       {
-       //sprintf(filename,"RESLT/boundary_coord_test_from_io%i.dat",b);
-       //some_file.open(filename);
-       this->setup_boundary_coordinates(b); //,some_file);
-       //some_file.close();
-     }       
-     //pause("done boundary coords test from io");
+       this->setup_boundary_coordinates(b);
+      }       
     }   
    
    /// Empty Destructor
    virtual ~RefineableTetgenMesh() {}
    
    /// \short Problem pointer (needed for multi-domain machinery during
-   /// adaptation)
+   /// adaptation) // hierher kill shouldn't be needed
    Problem*& problem_pt(){return Problem_pt;}
    
+   // hierher why arent't the sizes in base class? Could go into non-tree-based
+   // refineable base class, say. Certainly duplicates what we have in
+   // triangle mesh
+
    /// Max element size allowed during adaptation
    double& max_element_size(){return Max_element_size;}
    
@@ -174,28 +170,7 @@ template<class ELEMENT>
    void adapt(const Vector<double>& elem_error);
    
    
-   //protected:
-   
-   /// \short Helper function that updates the input polygon's PSLG
-   /// by using the end-points of elements from FaceMesh(es) that are
-   /// constructed for the boundaries associated with the segments of the
-   /// polygon.
-   //void update_polygon_using_face_mesh(TriangleMeshPolygon* polygon_pt);
-   
-   /// \short Generate a new PSLG representation of the inner hole
-   /// boundaries
-   //virtual void surface_remesh_for_inner_hole_boundaries(
-   // Vector<Vector<double> > &internal_point_coord);
-   
-   
-   /// \short Generate a new PSLG representation of the outer boundary
-   //virtual void surface_remesh_for_outer_boundary();
-   
-   
-  /// \short Snap the boundary nodes onto any curvilinear boundaries
-  //void snap_nodes_onto_boundary(RefineableTriangleMesh<ELEMENT>* &new_mesh_pt,
-  //                              const unsigned &b);
-
+    protected:
    
    /// Helper function to initialise data associated with adaptation
    void initialise_adaptation_data()
@@ -206,21 +181,16 @@ template<class ELEMENT>
     this->Max_permitted_edge_ratio=2.0;
     
     // Initialise problem pointer
-    this->Problem_pt=0;
+    this->Problem_pt=0; // hierher kill shouldn't be needed
    }
    
-   /// \short Build a new tetgenio object from previous TriangulateIO
-   /// based on target area for each element
-   //void refine_triangulateio(tetgenio& tetgen_io, 
-   //                          const Vector<double> &target_volume,
-   //                          tetgenio &tetgen_refine);
    
 
-   /// \short Compute target volume based on the element's error and the
+   /// \short Compute target volume based on the elements' error and the
    /// error target; return max edge ratio
    double compute_volume_target(const Vector<double> &elem_error,
                                 Vector<double> &target_volume)
-    {
+   {
      double max_edge_ratio=0.0;
      unsigned count_unrefined=0;
      unsigned count_refined=0;
@@ -271,6 +241,7 @@ template<class ELEMENT>
        //Solve the linear system, in which the rhs is over-written with 
        //the solution
        A.solve(rhs);
+
        //Calculate the circum-radius
        double circum_radius = 
         sqrt(rhs[0]*rhs[0] + rhs[1]*rhs[1] + rhs[2]*rhs[2]);
@@ -340,8 +311,10 @@ template<class ELEMENT>
    
    /// \short Problem pointer (needed for multi-domain machinery during
    /// adaptation
-   Problem* Problem_pt;
+   Problem* Problem_pt; // hierher kill shouldn't be needed
    
+   // hierher put these in some base class?
+
    /// Max permitted element size
    double Max_element_size;
    
@@ -363,6 +336,13 @@ template<class ELEMENT>
 template <class ELEMENT>
 void RefineableTetgenMesh<ELEMENT>::adapt(const Vector<double>& elem_error)
  {    
+
+
+  double t_start=0.0;
+  //###################################
+  t_start=TimingHelpers::timer();
+  //###################################
+
   // Get refinement targets
   Vector<double> target_size(elem_error.size());
   double max_edge_ratio=compute_volume_target(elem_error,
@@ -391,6 +371,12 @@ void RefineableTetgenMesh<ELEMENT>::adapt(const Vector<double>& elem_error)
              << orig_max_size  << " "
              << orig_min_size << std::endl;    
 
+  //##################################################################
+  oomph_info << "adapt: Time for getting volume targets                      : "
+             << TimingHelpers::timer()-t_start
+             << " sec " << std::endl;
+  //##################################################################
+
   // Should we bother to adapt?
   if ( (Nrefined > 0) || (Nunrefined > this->max_keep_unrefined()) ||
        (max_edge_ratio > this->max_permitted_edge_ratio()) )
@@ -402,55 +388,49 @@ void RefineableTetgenMesh<ELEMENT>::adapt(const Vector<double>& elem_error)
        << "Mesh regeneration triggered by edge ratio criterion\n";
      }
 
-    //Generate a new 1D mesh representation of the inner hole boundaries
-    //unsigned nhole=this->Internal_polygon_pt.size();
-    //Vector<Vector<double> > internal_point_coord(nhole);
-    //this->surface_remesh_for_inner_hole_boundaries(internal_point_coord);
-
-    //Update the representation of the outer boundary
-    //this->surface_remesh_for_outer_boundary();
-
-    //If there is not a geometric object associated with the boundary
-    //the reset the boundary coordinates so that the lengths are consistent
-    //in the new mesh and the old mesh.
-    //const  unsigned n_boundary = this->nboundary();
-    //for(unsigned b=0;b<n_boundary;++b)
-    // {
-    //  if(this->boundary_geom_object_pt(b)==0)
-    //   {
-    //    this->setup_boundary_coordinates(b);
-    //   }
-    // }
+    //###################################
+    t_start=TimingHelpers::timer();
+    //###################################
 
     // Are we dealing with a solid mesh?
     SolidMesh* solid_mesh_pt=dynamic_cast<SolidMesh*>(this);
-
+    
     // Build temporary uniform background mesh
     //----------------------------------------
     // with volume set by maximum required volume
     //---------------------------------------
     RefineableTetgenMesh<ELEMENT>* tmp_new_mesh_pt=0;
-    /*  if (solid_mesh_pt!=0)
+    if (solid_mesh_pt!=0)
      {
-      tmp_new_mesh_pt=new RefineableSolidTriangleMesh<ELEMENT>
-       (closed_curve_pt,
-        hole_pt,
+      throw OomphLibError("Solid meshes not done yet",
+                          OOMPH_CURRENT_FUNCTION,
+                          OOMPH_EXCEPTION_LOCATION);
+      /* tmp_new_mesh_pt=new RefineableSolidTriangleMesh<ELEMENT> */
+      /*  (closed_curve_pt, */
+      /*   hole_pt, */
+      /*   max_size, */
+      /*   this->Time_stepper_pt, */
+      /*   this->Use_attributes); */
+     }
+    else
+     {
+      tmp_new_mesh_pt=new RefineableTetgenMesh<ELEMENT>
+       (this->Outer_boundary_pt,
+        this->Internal_surface_pt,
         max_size,
         this->Time_stepper_pt,
         this->Use_attributes);
      }
-     else*/
-    {
-     tmp_new_mesh_pt=new RefineableTetgenMesh<ELEMENT>
-      (this->Outer_boundary_pt,
-       this->Internal_surface_pt,
-       max_size,
-       this->Time_stepper_pt,
-       this->Use_attributes);
-    }
+    
+
+    //##################################################################
+    oomph_info << "adapt: Time for building temp mesh                        : "
+               << TimingHelpers::timer()-t_start
+               << " sec " << std::endl;
+    //##################################################################
 
 
-
+    //######################################################################
     // Snap to curvilinear boundaries (some code duplication as this
     // is repeated below but helper function would take so many
     // arguments that it's nearly as messy...
@@ -485,11 +465,14 @@ void RefineableTetgenMesh<ELEMENT>::adapt(const Vector<double>& elem_error)
     
     //Output the mesh after the snapping has taken place
     //tmp_new_mesh_pt->output("mesh_nodes_snapped_0.dat"); 
-    
+    //######################################################################
+
+
     // Get the tetgenio object associated with that mesh
     tetgenio *tmp_new_tetgenio_pt = tmp_new_mesh_pt->tetgenio_pt();
-
     
+    
+// hierher kill shouldn't be needed
 #ifdef PARANOID
     if (this->Problem_pt==0) 
      {
@@ -505,14 +488,6 @@ void RefineableTetgenMesh<ELEMENT>::adapt(const Vector<double>& elem_error)
     // tetgenio mesh
     std::map<GeneralisedElement*,double> target_size_map;
 
-
-    //////////////////////////////////////////////////////////////
-    // NOTE: Repeated setup of multidomain interaction could
-    // be avoided by setting up a sufficiently fine bin
-    // for the original mesh and reading out the target
-    // area information from there
-    //////////////////////////////////////////////////////////////
-
     // Now start iterating to refine mesh recursively
     //-----------------------------------------------
     bool done=false;
@@ -520,6 +495,8 @@ void RefineableTetgenMesh<ELEMENT>::adapt(const Vector<double>& elem_error)
     while (!done)
      {
       
+
+
       // "Project" target volumes from current mesh onto uniform
       //------------------------------------------------------
       // background mesh
@@ -543,11 +520,30 @@ void RefineableTetgenMesh<ELEMENT>::adapt(const Vector<double>& elem_error)
          enable_projection();
        }
 
+
+      //###################################
+      t_start=TimingHelpers::timer();
+      //###################################
+      
+
+// hierher kill shouldn't be needed
+
       // Set up multi domain interactions so we can figure out
       // which element in the intermediate uniform mesh is co-located
       // with given element in current mesh (which is to be refined)
       Multi_domain_functions::setup_multi_domain_interaction
        <ELEMENT>(this->Problem_pt,this,tmp_new_mesh_pt);
+      
+
+      //##################################################################
+      oomph_info << "adapt: Time for setup_multi_domain_interaction          : "
+                 << TimingHelpers::timer()-t_start
+                 << " sec " << std::endl;
+      //##################################################################
+      
+      //###################################
+      t_start=TimingHelpers::timer();
+      //###################################
       
       target_size_map.clear();
       for (unsigned e=0;e<nelem;e++)
@@ -611,6 +607,12 @@ void RefineableTetgenMesh<ELEMENT>::adapt(const Vector<double>& elem_error)
        }
       
       
+      //##################################################################
+      oomph_info << "adapt: Time for new_target_size[.]                      : "
+                 << TimingHelpers::timer()-t_start
+                 << " sec " << std::endl;
+      //##################################################################
+
 
       // Now create the new mesh from TriangulateIO structure
       //-----------------------------------------------------
@@ -618,6 +620,10 @@ void RefineableTetgenMesh<ELEMENT>::adapt(const Vector<double>& elem_error)
       //------------------------------------------------
       // associated target element sizes.
       //---------------------------------
+      
+      //###################################
+      t_start=TimingHelpers::timer();
+      //###################################
       
       // Solid mesh?
       /*if (solid_mesh_pt!=0)
@@ -638,6 +644,12 @@ void RefineableTetgenMesh<ELEMENT>::adapt(const Vector<double>& elem_error)
           this->Use_attributes);
        }    
       
+       //##################################################################
+       oomph_info << "adapt: Time for new_mesh_pt                            : "
+                  << TimingHelpers::timer()-t_start
+                  << " sec " << std::endl;
+       //##################################################################
+
       
       // Snap to curvilinear boundaries (some code duplication as this
       // is repeated below but helper function would take so many
@@ -690,12 +702,26 @@ void RefineableTetgenMesh<ELEMENT>::adapt(const Vector<double>& elem_error)
      } // end of iteration
     
 
+    //###################################
+    t_start=TimingHelpers::timer();
+    //###################################
+    
     // Project current solution onto new mesh
     //---------------------------------------
     ProjectionProblem<ELEMENT>* project_problem_pt=
      new ProjectionProblem<ELEMENT>;
     project_problem_pt->mesh_pt()=new_mesh_pt;
     project_problem_pt->project(this);
+    
+    //##################################################################
+    oomph_info << "adapt: Time for project soln onto new mesh                : "
+               << TimingHelpers::timer()-t_start
+               << " sec " << std::endl;
+    //##################################################################
+    
+    //###################################
+    t_start=TimingHelpers::timer();
+    //###################################
     
     //this->output("pre_proj",5);
     //new_mesh_pt->output("post_proj.dat",5);
@@ -829,6 +855,12 @@ void RefineableTetgenMesh<ELEMENT>::adapt(const Vector<double>& elem_error)
     // Delete the mesh and the problem
     delete new_mesh_pt;
     delete project_problem_pt;
+
+    //##################################################################
+    oomph_info << "adapt: Time for moving nodes etc. to actual mesh          : "
+               << TimingHelpers::timer()-t_start
+               << " sec " << std::endl;
+    //##################################################################
 
     // Solid mesh?
     if (solid_mesh_pt!=0)
